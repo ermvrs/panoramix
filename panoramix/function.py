@@ -379,24 +379,50 @@ class Function(EasyCopy):
 
         exp_text.append(("possible return values", prettify(self.returns)))
 
-        first = self.trace[0]
-
-        if (
-            opcode(first) == "if"
-            and simplify_bool(first[1]) == "callvalue"
-            and (first[2][0] == ("revert", 0) or opcode(first[2][0]) == "invalid")
-        ):
-            self.trace = self.trace[0][3]
+        # Detect payable functions by looking for callvalue checks
+        # Modern Solidity (0.8.x) defaults to non-payable, so:
+        # - If there's a callvalue check that reverts -> non-payable  
+        # - If there's no callvalue check -> non-payable (default)
+        # - Only if there's a callvalue check that doesn't revert -> payable
+        
+        self.payable = False  # Default to non-payable (modern Solidity behavior)
+        callvalue_check_found = False
+        
+        for i, line in enumerate(self.trace[:5]):  # Check first 5 instructions
+            if (
+                opcode(line) == "if"
+                and simplify_bool(line[1]) == "callvalue"
+                and (line[2][0] == ("revert", 0) or opcode(line[2][0]) == "invalid")
+            ):
+                # Callvalue check that reverts if value sent -> non-payable
+                self.trace = self.trace[:i] + line[3] + self.trace[i+1:]
+                self.payable = False
+                callvalue_check_found = True
+                break
+            elif (
+                opcode(line) == "if"
+                and simplify_bool(line[1]) == ("iszero", "callvalue")
+                and (line[3][0] == ("revert", 0) or opcode(line[3][0]) == "invalid")
+            ):
+                # Callvalue check that reverts if no value sent -> non-payable
+                self.trace = self.trace[:i] + line[2] + self.trace[i+1:]
+                self.payable = False
+                callvalue_check_found = True
+                break
+            elif (
+                opcode(line) == "if" 
+                and "callvalue" in str(line[1])
+                and not (line[2][0] == ("revert", 0) or opcode(line[2][0]) == "invalid")
+                and not (line[3][0] == ("revert", 0) or opcode(line[3][0]) == "invalid")
+            ):
+                # Callvalue check that doesn't revert -> potentially payable
+                self.payable = True
+                callvalue_check_found = True
+                break
+        
+        # If no callvalue check found, it's non-payable by default (modern Solidity)
+        if not callvalue_check_found:
             self.payable = False
-        elif (
-            opcode(first) == "if"
-            and simplify_bool(first[1]) == ("iszero", "callvalue")
-            and (first[3][0] == ("revert", 0) or opcode(first[3][0]) == "invalid")
-        ):
-            self.trace = self.trace[0][2]
-            self.payable = False
-        else:
-            self.payable = True
 
         exp_text.append(("payable", self.payable))
 
