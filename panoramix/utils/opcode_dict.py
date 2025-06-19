@@ -89,10 +89,13 @@ opcode_dict = {
     0x59: "msize",
     0x5A: "gas",
     0x5B: "jumpdest",
+    0x5C: 'tload',
+    0x5D: 'tstore',
+    0x5E: 'mcopy',
     #
     # Push Operations
     #
-    0x5f: "push0",
+    0x5F: "push0",
     0x60: "push1",
     0x61: "push2",
     0x62: "push3",
@@ -190,6 +193,9 @@ opcode_dict = {
 # was parsed correctly in vm.apply_stack
 
 stack_diffs = {
+    "mcopy": -3,
+    "tload": 0,
+    "tstore": -2,
     "create": -2,
     "create2": -3,
     "invalid": None,
